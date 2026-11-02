@@ -1,5 +1,7 @@
 # Meta Conversions API — Itália
 
+Arquivo para importar no n8n: `meta-capi-italia.workflow.json`.
+
 O site envia ao webhook `POST /webhook/pixel` um campo form-urlencoded chamado
 `payload`. O valor de `payload` é uma string JSON. Esse formato evita o preflight
 CORS e não expõe o token da Meta no navegador.
