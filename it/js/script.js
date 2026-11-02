@@ -36,28 +36,7 @@ const META_CONFIG = Object.freeze({
   capiEndpoint: "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel"
 });
 
-const META_CONSENT_KEY = "manualcriativo_meta_consent";
 let metaPixelReady = false;
-let metaConsentState = null;
-
-function readMetaConsent() {
-  if (metaConsentState) return metaConsentState;
-  try {
-    metaConsentState = window.localStorage.getItem(META_CONSENT_KEY);
-    return metaConsentState;
-  } catch {
-    return null;
-  }
-}
-
-function saveMetaConsent(value) {
-  metaConsentState = value;
-  try {
-    window.localStorage.setItem(META_CONSENT_KEY, value);
-  } catch {
-    // The choice remains valid for the current page even if storage is blocked.
-  }
-}
 
 function createEventId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -112,7 +91,7 @@ function sendCapiEvent(eventName, eventId, customData) {
 }
 
 function trackMetaEvent(eventName, customData = {}) {
-  if (readMetaConsent() !== "granted" || !metaPixelReady || typeof window.fbq !== "function") return;
+  if (!metaPixelReady || typeof window.fbq !== "function") return;
 
   const eventId = createEventId();
   window.fbq("track", eventName, customData, { eventID: eventId });
@@ -120,7 +99,7 @@ function trackMetaEvent(eventName, customData = {}) {
 }
 
 function loadMetaPixel() {
-  if (metaPixelReady || readMetaConsent() !== "granted") return;
+  if (metaPixelReady) return;
 
   if (typeof window.fbq !== "function") {
     (function(f, b, e, v, n, t, s) {
@@ -139,40 +118,13 @@ function loadMetaPixel() {
     })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
   }
 
-  window.fbq("consent", "grant");
   window.fbq("init", META_CONFIG.pixelId);
   metaPixelReady = true;
   trackMetaEvent("PageView");
 }
 
 function setupMetaTracking() {
-  const banner = document.getElementById("metaConsentBanner");
-  const accept = banner?.querySelector("[data-cookie-accept]");
-  const refuse = banner?.querySelector("[data-cookie-refuse]");
-  const settings = document.querySelector("[data-cookie-settings]");
-  const currentConsent = readMetaConsent();
-
-  if (currentConsent === "granted") {
-    loadMetaPixel();
-  } else if (!currentConsent && banner) {
-    banner.hidden = false;
-  }
-
-  accept?.addEventListener("click", () => {
-    saveMetaConsent("granted");
-    banner.hidden = true;
-    loadMetaPixel();
-  });
-
-  refuse?.addEventListener("click", () => {
-    saveMetaConsent("denied");
-    banner.hidden = true;
-    if (typeof window.fbq === "function") window.fbq("consent", "revoke");
-  });
-
-  settings?.addEventListener("click", () => {
-    if (banner) banner.hidden = false;
-  });
+  loadMetaPixel();
 
   document.querySelectorAll("[data-meta-checkout]").forEach((link) => {
     link.addEventListener("click", () => {
