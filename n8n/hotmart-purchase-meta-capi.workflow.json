@@ -65,6 +65,16 @@
     },
     {
       "parameters": {
+        "jsCode": "const output = $input.first().json;\nconst event = output.capi?.data?.[0];\nconst ids = event?.custom_data?.content_ids ?? [];\nif (event && ids.map(String).includes('0')) {\n  event.event_time = Math.floor(Date.now() / 1000);\n}\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 0],
+      "id": "de61a17d-a8a8-47b9-bc57-f34a7c40b8b2",
+      "name": "Corrigir data somente no sandbox"
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://graph.facebook.com/v24.0/2328916111389472/events",
         "sendQuery": true,
@@ -76,7 +86,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [580, 0],
+      "position": [720, 0],
       "id": "43901054-c9eb-4886-a64a-940189d5f4cb",
       "name": "Enviar Purchase para Meta"
     }
@@ -86,7 +96,8 @@
     "Validar Hotmart e extrair compra": { "main": [[{ "node": "Buscar clique pelo sck", "type": "main", "index": 0 }]] },
     "Buscar clique pelo sck": { "main": [[{ "node": "Montar Purchase com dados correlacionados", "type": "main", "index": 0 }]] },
     "Montar Purchase com dados correlacionados": { "main": [[{ "node": "Maximizar correspondencia", "type": "main", "index": 0 }]] },
-    "Maximizar correspondencia": { "main": [[{ "node": "Enviar Purchase para Meta", "type": "main", "index": 0 }]] }
+    "Maximizar correspondencia": { "main": [[{ "node": "Corrigir data somente no sandbox", "type": "main", "index": 0 }]] },
+    "Corrigir data somente no sandbox": { "main": [[{ "node": "Enviar Purchase para Meta", "type": "main", "index": 0 }]] }
   },
   "pinData": {},
   "active": false,
