@@ -1,106 +1,126 @@
 {
-  "name": "Meta CAPI Italia - Pixel 2328916111389472",
+  "name": "Meta CAPI Italia - navegador e correlacao",
   "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-560, -260],
+      "id": "ae0ad231-a69b-44fc-945e-55873c1f9160",
+      "name": "Executar uma vez - criar tabela"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "meta_tracking",
+        "columns": { "column": [
+          { "name": "tracking_id", "type": "string" },
+          { "name": "fbc", "type": "string" },
+          { "name": "fbp", "type": "string" },
+          { "name": "client_ip_address", "type": "string" },
+          { "name": "client_user_agent", "type": "string" },
+          { "name": "event_source_url", "type": "string" },
+          { "name": "updated_at", "type": "string" }
+        ] },
+        "options": { "createIfNotExists": true }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-300, -260],
+      "id": "762cdd6c-1944-4d48-9494-8237a5850b1e",
+      "name": "Criar meta_tracking"
+    },
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "pixel",
         "responseMode": "onReceived",
-        "options": {
-          "responseCode": 200
-        }
+        "options": { "responseCode": 200 }
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        -480,
-        0
-      ],
+      "position": [-560, 40],
       "id": "8e15ccb4-1190-4ea9-8eeb-63f39b9b3c12",
       "name": "Receber evento do site",
       "webhookId": "1522ddca-250e-4c16-84b1-a93dc5a4f701"
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst rawPayload = input.body?.payload ?? input.payload;\n\nif (!rawPayload) {\n  throw new Error('Payload ausente');\n}\n\nconst event = typeof rawPayload === 'string'\n  ? JSON.parse(rawPayload)\n  : rawPayload;\n\nconst allowedEvents = new Set(['PageView', 'InitiateCheckout']);\nif (!allowedEvents.has(event.event_name)) {\n  throw new Error('Evento não permitido');\n}\n\nif (!event.event_id || !event.event_time || !event.event_source_url) {\n  throw new Error('event_id, event_time ou event_source_url ausente');\n}\n\nconst headers = input.headers ?? {};\nconst forwardedFor = headers['x-forwarded-for'] ?? headers['x-real-ip'] ?? '';\nconst clientIp = String(forwardedFor).split(',')[0].trim();\n\nconst userData = {\n  fbc: event.user_data?.fbc || undefined,\n  fbp: event.user_data?.fbp || undefined,\n  client_user_agent: event.user_agent || headers['user-agent'] || undefined,\n  client_ip_address: clientIp || undefined,\n};\n\nObject.keys(userData).forEach((key) => {\n  if (userData[key] === undefined || userData[key] === null || userData[key] === '') {\n    delete userData[key];\n  }\n});\n\nreturn [{\n  json: {\n    data: [{\n      event_name: event.event_name,\n      event_time: Number(event.event_time),\n      event_id: String(event.event_id),\n      action_source: 'website',\n      event_source_url: String(event.event_source_url),\n      user_data: userData,\n      custom_data: event.custom_data ?? {},\n    }],\n  },\n}];"
+        "jsCode": "const input = $input.first().json;\nconst rawPayload = input.body?.payload ?? input.payload;\nif (!rawPayload) throw new Error('Payload ausente');\nconst event = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;\nconst allowedEvents = new Set(['PageView', 'InitiateCheckout']);\nif (!allowedEvents.has(event.event_name)) throw new Error('Evento nao permitido');\nif (!event.event_id || !event.event_time || !event.event_source_url || !event.tracking_id) throw new Error('Campos obrigatorios ausentes');\nconst headers = input.headers ?? {};\nconst forwardedFor = headers['x-forwarded-for'] ?? headers['x-real-ip'] ?? '';\nconst clientIp = String(forwardedFor).split(',')[0].trim();\nconst userData = {\n  fbc: event.user_data?.fbc || undefined,\n  fbp: event.user_data?.fbp || undefined,\n  client_user_agent: event.user_agent || headers['user-agent'] || undefined,\n  client_ip_address: clientIp || undefined,\n};\nObject.keys(userData).forEach((key) => { if (!userData[key]) delete userData[key]; });\nreturn [{ json: {\n  tracking_id: String(event.tracking_id),\n  fbc: userData.fbc ?? '',\n  fbp: userData.fbp ?? '',\n  client_ip_address: userData.client_ip_address ?? '',\n  client_user_agent: userData.client_user_agent ?? '',\n  event_source_url: String(event.event_source_url),\n  updated_at: new Date().toISOString(),\n  capi: { data: [{\n    event_name: event.event_name,\n    event_time: Number(event.event_time),\n    event_id: String(event.event_id),\n    action_source: 'website',\n    event_source_url: String(event.event_source_url),\n    user_data: userData,\n    custom_data: event.custom_data ?? {},\n  }] },\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -240,
-        0
-      ],
+      "position": [-300, 40],
       "id": "ba41d640-a2fc-4899-b0db-20bc90ae93fd",
-      "name": "Montar evento CAPI"
+      "name": "Validar e montar evento"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": { "__rl": true, "value": "meta_tracking", "mode": "name" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [{ "keyName": "tracking_id", "condition": "eq", "keyValue": "={{ $json.tracking_id }}" }] },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tracking_id": "={{ $json.tracking_id }}",
+            "fbc": "={{ $json.fbc }}",
+            "fbp": "={{ $json.fbp }}",
+            "client_ip_address": "={{ $json.client_ip_address }}",
+            "client_user_agent": "={{ $json.client_user_agent }}",
+            "event_source_url": "={{ $json.event_source_url }}",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "schema": [
+            { "id": "tracking_id", "displayName": "tracking_id", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "fbc", "displayName": "fbc", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "fbp", "displayName": "fbp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "client_ip_address", "displayName": "client_ip_address", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "client_user_agent", "displayName": "client_user_agent", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "event_source_url", "displayName": "event_source_url", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "updated_at", "displayName": "updated_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-20, -60],
+      "id": "5f60da31-3197-4fdc-82fb-a80536b39c8a",
+      "name": "Salvar correlacao"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://graph.facebook.com/v24.0/2328916111389472/events",
         "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "access_token",
-              "value": "COLE_SEU_TOKEN_CAPI_AQUI"
-            }
-          ]
-        },
+        "queryParameters": { "parameters": [{ "name": "access_token", "value": "COLE_SEU_TOKEN_CAPI_AQUI" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": false,
-              "responseFormat": "json"
-            }
-          }
-        }
+        "jsonBody": "={{ JSON.stringify($json.capi) }}",
+        "options": { "response": { "response": { "fullResponse": true, "neverError": false, "responseFormat": "json" } } }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        0,
-        0
-      ],
+      "position": [-20, 140],
       "id": "f6674028-adcf-4b4f-b81d-7cc9541d8c0e",
-      "name": "Enviar para Meta CAPI"
+      "name": "Enviar evento do site para Meta"
     }
   ],
   "connections": {
-    "Receber evento do site": {
-      "main": [
-        [
-          {
-            "node": "Montar evento CAPI",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Montar evento CAPI": {
-      "main": [
-        [
-          {
-            "node": "Enviar para Meta CAPI",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Executar uma vez - criar tabela": { "main": [[{ "node": "Criar meta_tracking", "type": "main", "index": 0 }]] },
+    "Receber evento do site": { "main": [[{ "node": "Validar e montar evento", "type": "main", "index": 0 }]] },
+    "Validar e montar evento": { "main": [[
+      { "node": "Salvar correlacao", "type": "main", "index": 0 },
+      { "node": "Enviar evento do site para Meta", "type": "main", "index": 0 }
+    ]] }
   },
   "pinData": {},
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "versionId": "57d75425-103c-4bf3-92b0-38c77349f42b",
-  "meta": {
-    "templateCredsSetupCompleted": false
-  },
+  "settings": { "executionOrder": "v1" },
+  "versionId": "a156282d-d6d3-4b03-ae53-986c83aa9de9",
+  "meta": { "templateCredsSetupCompleted": false },
   "tags": []
 }

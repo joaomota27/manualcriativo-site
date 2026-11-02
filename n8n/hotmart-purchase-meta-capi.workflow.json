@@ -1,0 +1,86 @@
+{
+  "name": "Hotmart Purchase - Meta CAPI Italia",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hotmart-purchase",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-600, 0],
+      "id": "29fbed0e-cb15-4fda-82a9-25c4c589fc93",
+      "name": "Webhook Hotmart",
+      "webhookId": "7808b038-728b-46b6-82e8-2c586c70674d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const EXPECTED_HOTTOK = 'COLE_SEU_HOTTOK_AQUI';\nconst input = $input.first().json;\nconst headers = input.headers ?? {};\nconst receivedHottok = String(headers['x-hotmart-hottok'] ?? '');\nif (EXPECTED_HOTTOK.startsWith('COLE_')) throw new Error('Configure o HOTTOK neste node');\nif (!receivedHottok || receivedHottok !== EXPECTED_HOTTOK) throw new Error('HOTTOK invalido');\n\nconst body = input.body ?? input;\nif (body.event !== 'PURCHASE_APPROVED') throw new Error(`Evento ignorado: ${body.event ?? 'ausente'}`);\nconst data = body.data ?? {};\nconst purchase = data.purchase ?? {};\nconst buyer = data.buyer ?? {};\nconst product = data.product ?? {};\nconst transaction = String(purchase.transaction ?? '');\nif (!transaction) throw new Error('Transacao Hotmart ausente');\n\nfunction unixSeconds(value) {\n  if (!value) return Math.floor(Date.now() / 1000);\n  const numeric = Number(value);\n  if (Number.isFinite(numeric)) return Math.floor(numeric > 9999999999 ? numeric / 1000 : numeric);\n  const parsed = Date.parse(value);\n  return Number.isNaN(parsed) ? Math.floor(Date.now() / 1000) : Math.floor(parsed / 1000);\n}\n\nconst address = buyer.address ?? {};\nconst price = purchase.price ?? purchase.full_price ?? {};\nreturn [{ json: {\n  tracking_id: String(purchase.origin?.sck ?? ''),\n  transaction,\n  event_time: unixSeconds(purchase.approved_date ?? purchase.order_date ?? body.creation_date),\n  value: Number(price.value ?? 0),\n  currency: String(price.currency_value ?? 'EUR'),\n  product_id: String(product.id ?? ''),\n  product_name: String(product.name ?? '101 modelli di borse all uncinetto'),\n  buyer_email: String(buyer.email ?? ''),\n  buyer_phone: String(buyer.checkout_phone ?? buyer.phone ?? ''),\n  buyer_first_name: String(buyer.first_name ?? buyer.name?.split(' ')[0] ?? ''),\n  buyer_last_name: String(buyer.last_name ?? buyer.name?.split(' ').slice(1).join(' ') ?? ''),\n  buyer_city: String(address.city ?? ''),\n  buyer_state: String(address.state ?? address.state_code ?? ''),\n  buyer_country: String(purchase.checkout_country?.iso ?? address.country_iso ?? ''),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-360, 0],
+      "id": "a52617ba-4663-41c0-8457-7fd5a2c5a880",
+      "name": "Validar Hotmart e extrair compra"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": { "__rl": true, "value": "meta_tracking", "mode": "name" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [{ "keyName": "tracking_id", "condition": "eq", "keyValue": "={{ $json.tracking_id }}" }] },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-100, 0],
+      "id": "41b04acb-c5db-420c-b38a-322906fe07dc",
+      "name": "Buscar clique pelo sck",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const sale = $('Validar Hotmart e extrair compra').first().json;\nconst tracking = $input.first().json ?? {};\n\nfunction sha256(ascii) {\n  ascii = unescape(encodeURIComponent(String(ascii)));\n  const rightRotate = (value, amount) => (value >>> amount) | (value << (32 - amount));\n  const maxWord = Math.pow(2, 32);\n  let result = '';\n  const words = [];\n  const asciiBitLength = ascii.length * 8;\n  let hash = sha256.h = sha256.h || [];\n  let k = sha256.k = sha256.k || [];\n  let primeCounter = k.length;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;\n      hash[primeCounter] = (Math.pow(candidate, 0.5) * maxWord) | 0;\n      k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;\n    }\n  }\n  ascii += '\\x80';\n  while (ascii.length % 64 - 56) ascii += '\\x00';\n  for (let i = 0; i < ascii.length; i++) words[i >> 2] |= ascii.charCodeAt(i) << ((3 - i) % 4) * 8;\n  words[words.length] = (asciiBitLength / maxWord) | 0;\n  words[words.length] = asciiBitLength;\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, j += 16);\n    const oldHash = hash.slice(0);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = i < 16 ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0);\n      const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(temp1 + temp2) | 0].concat(hash);\n      hash[4] = (hash[4] + temp1) | 0;\n      hash.pop();\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;\n  }\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    result += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return result;\n}\n\nconst text = (value) => String(value ?? '').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst compact = (value) => text(value).replace(/[^a-z0-9]/g, '');\nconst userData = {};\nconst addHash = (key, value, normalize = text) => { const normalized = normalize(value); if (normalized) userData[key] = [sha256(normalized)]; };\naddHash('em', sale.buyer_email);\naddHash('ph', sale.buyer_phone, (v) => String(v ?? '').replace(/\\D/g, ''));\naddHash('fn', sale.buyer_first_name, compact);\naddHash('ln', sale.buyer_last_name, compact);\naddHash('ct', sale.buyer_city, compact);\naddHash('st', sale.buyer_state, compact);\naddHash('country', sale.buyer_country, compact);\naddHash('external_id', sale.tracking_id, text);\nif (tracking.fbc) userData.fbc = tracking.fbc;\nif (tracking.fbp) userData.fbp = tracking.fbp;\nif (tracking.client_ip_address) userData.client_ip_address = tracking.client_ip_address;\nif (tracking.client_user_agent) userData.client_user_agent = tracking.client_user_agent;\n\nreturn [{ json: { capi: { data: [{\n  event_name: 'Purchase',\n  event_time: sale.event_time,\n  event_id: sale.transaction,\n  action_source: 'website',\n  event_source_url: tracking.event_source_url || 'https://joaomota27.github.io/manualcriativo-site/it/',\n  user_data: userData,\n  custom_data: {\n    currency: sale.currency,\n    value: sale.value,\n    content_ids: sale.product_id ? [sale.product_id] : [],\n    contents: sale.product_id ? [{ id: sale.product_id, quantity: 1 }] : [],\n    content_type: 'product',\n    content_name: sale.product_name,\n  },\n}] } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 0],
+      "id": "567995ca-652a-4fb0-8e24-11df2e5f6e91",
+      "name": "Montar Purchase com dados correlacionados"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v24.0/2328916111389472/events",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [{ "name": "access_token", "value": "COLE_SEU_TOKEN_CAPI_AQUI" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.capi) }}",
+        "options": { "response": { "response": { "fullResponse": true, "neverError": false, "responseFormat": "json" } } }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "id": "43901054-c9eb-4886-a64a-940189d5f4cb",
+      "name": "Enviar Purchase para Meta"
+    }
+  ],
+  "connections": {
+    "Webhook Hotmart": { "main": [[{ "node": "Validar Hotmart e extrair compra", "type": "main", "index": 0 }]] },
+    "Validar Hotmart e extrair compra": { "main": [[{ "node": "Buscar clique pelo sck", "type": "main", "index": 0 }]] },
+    "Buscar clique pelo sck": { "main": [[{ "node": "Montar Purchase com dados correlacionados", "type": "main", "index": 0 }]] },
+    "Montar Purchase com dados correlacionados": { "main": [[{ "node": "Enviar Purchase para Meta", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "8086a7a7-36a6-465e-ad7f-15bb9f3d5103",
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": []
+}

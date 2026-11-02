@@ -1,87 +1,56 @@
-# Meta Conversions API — Itália
+# Meta CAPI + Hotmart — Itália
 
-Arquivo para importar no n8n: `meta-capi-italia.workflow.json`.
+Os arquivos deste diretório implementam a correlação completa entre a visita ao
+site, o checkout Hotmart e o evento `Purchase` da Meta.
 
-O site envia ao webhook `POST /webhook/pixel` um campo form-urlencoded chamado
-`payload`. O valor de `payload` é uma string JSON. Esse formato evita o preflight
-CORS e não expõe o token da Meta no navegador.
+## Arquivos
 
-## Flusso n8n
+- `meta-capi-italia.workflow.json`: recebe `PageView` e `InitiateCheckout`, envia
+  os eventos à Meta e salva `fbc`, `fbp`, IP e user-agent pelo `tracking_id`.
+- `hotmart-purchase-meta-capi.workflow.json`: recebe `PURCHASE_APPROVED` da
+  Hotmart, encontra os dados pelo `sck` e envia `Purchase` à Meta.
 
-1. **Webhook**
-   - Method: `POST`
-   - Path: `pixel`
-   - Response: usando o nó `Respond to Webhook`
-2. **Code** — incolla il codice abaixo.
-3. **HTTP Request** — envia o JSON produzido para a Meta.
-4. **Respond to Webhook** — status `200`, corpo `{"ok":true}`.
+## Instalação
 
-## Code node
+1. Importe `meta-capi-italia.workflow.json` no n8n.
+2. Abra o node `Enviar evento do site para Meta` e substitua
+   `COLE_SEU_TOKEN_CAPI_AQUI` pelo token da Meta.
+3. Execute manualmente o node `Executar uma vez - criar tabela`. Ele cria a Data
+   Table `meta_tracking`; a opção de reutilização evita duplicar a tabela.
+4. Ative o workflow e confirme que a URL de produção continua sendo
+   `https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel`.
+5. Importe `hotmart-purchase-meta-capi.workflow.json`.
+6. No node `Validar Hotmart e extrair compra`, substitua
+   `COLE_SEU_HOTTOK_AQUI` pelo HOTTOK configurado na Hotmart.
+7. No node `Enviar Purchase para Meta`, coloque o mesmo token da Meta.
+8. Ative o workflow. A URL de produção será
+   `https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/hotmart-purchase`.
+9. Na Hotmart, cadastre essa URL em **Ferramentas > Webhook**, selecione a versão
+   2 e marque o evento **Compra aprovada (`PURCHASE_APPROVED`)**.
 
-```javascript
-const input = $input.first().json;
-const rawPayload = input.body?.payload ?? input.payload;
+## Como a correlação funciona
 
-if (!rawPayload) {
-  throw new Error('Missing payload');
-}
+O site cria um UUID sem dados pessoais e o adiciona ao checkout como `sck`. O
+mesmo UUID acompanha os eventos enviados ao primeiro workflow. Quando a Hotmart
+notifica a compra, o segundo workflow lê `data.purchase.origin.sck`, recupera os
+identificadores do navegador e acrescenta os dados fornecidos pelo comprador.
 
-const event = typeof rawPayload === 'string'
-  ? JSON.parse(rawPayload)
-  : rawPayload;
+Email, telefone, nome, cidade, estado, país e `external_id` são normalizados e
+transformados em SHA-256 antes do envio. `fbc`, `fbp`, IP e user-agent são enviados
+sem hash, como exige a Meta.
 
-const headers = input.headers ?? {};
-const forwardedFor = headers['x-forwarded-for'] ?? headers['x-real-ip'] ?? '';
-const clientIp = String(forwardedFor).split(',')[0].trim();
+O `event_id` de `Purchase` é a transação Hotmart. Assim, uma repetição do webhook
+usa o mesmo ID e a Meta pode deduplicá-la. `InitiateCheckout` mantém outro
+`event_id`, pois é um evento diferente.
 
-const userData = {
-  ...event.user_data,
-  client_user_agent: event.user_agent || headers['user-agent'] || undefined,
-  client_ip_address: clientIp || undefined,
-};
+## Teste recomendado
 
-Object.keys(userData).forEach((key) => {
-  if (userData[key] === undefined || userData[key] === null || userData[key] === '') {
-    delete userData[key];
-  }
-});
+1. Abra a página italiana com `?fbclid=teste` apenas em ambiente de teste.
+2. Clique em um botão de checkout e confirme que a URL contém `sck=`.
+3. Confira se surgiu uma linha em `meta_tracking` no n8n.
+4. Use o envio de teste da Hotmart ou uma compra de teste.
+5. Confira no Gerenciador de Eventos da Meta se `Purchase` recebeu a transação
+   Hotmart como `event_id` e se os parâmetros de correspondência aparecem.
 
-return [{
-  json: {
-    data: [{
-      event_name: event.event_name,
-      event_time: event.event_time,
-      event_id: event.event_id,
-      action_source: 'website',
-      event_source_url: event.event_source_url,
-      user_data: userData,
-      custom_data: event.custom_data ?? {},
-    }],
-  },
-}];
-```
-
-## HTTP Request node
-
-- Method: `POST`
-- URL: `https://graph.facebook.com/vXX.X/2328916111389472/events`
-  - substitua `vXX.X` pela versão indicada no Gerenciador de Eventos da Meta.
-- Query parameter: `access_token`
-  - mantenha o token apenas em uma credencial ou variável segura do n8n.
-- Body Content Type: `JSON`
-- Body: `={{ $json }}`
-- Durante o teste, inclua `test_event_code` no corpo. Remova-o ao entrar em produção.
-
-## Campos
-
-- `fbc`: cookie `_fbc` ou valor derivado de `fbclid` pelo site.
-- `fbp`: cookie `_fbp` criado pelo Meta Pixel após consentimento.
-- `client_ip_address`: obtido no n8n pelo primeiro IP de `x-forwarded-for`.
-- `client_user_agent`: enviado pelo navegador e conferido com o cabeçalho recebido.
-- `ct`, `st`, `country`: envie apenas quando vierem de uma fonte confiável, como dados
-  fornecidos no checkout. Normalize em minúsculas e aplique SHA-256 antes de enviar.
-  Não invente esses campos a partir do idioma do navegador. A Meta já usa o IP para
-  localização aproximada.
-
-O mesmo `event_id` é usado no Pixel do navegador e na CAPI para deduplicação.
-
+Não publique tokens reais ou o HOTTOK no GitHub. Eles devem existir somente nos
+nodes do n8n ou, de preferência, em credenciais/variáveis seguras da instância.

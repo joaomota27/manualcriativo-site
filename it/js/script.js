@@ -33,7 +33,8 @@ function setupYear() {
 
 const META_CONFIG = Object.freeze({
   pixelId: "2328916111389472",
-  capiEndpoint: "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel"
+  capiEndpoint: "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel",
+  trackingStorageKey: "manualcriativo_meta_tracking_id"
 });
 
 let metaPixelReady = false;
@@ -41,6 +42,19 @@ let metaPixelReady = false;
 function createEventId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `evt_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function getTrackingId() {
+  try {
+    const currentId = window.localStorage.getItem(META_CONFIG.trackingStorageKey);
+    if (currentId) return currentId;
+
+    const newId = createEventId();
+    window.localStorage.setItem(META_CONFIG.trackingStorageKey, newId);
+    return newId;
+  } catch (_) {
+    return createEventId();
+  }
 }
 
 function getCookie(name) {
@@ -69,6 +83,7 @@ function sendCapiEvent(eventName, eventId, customData) {
   });
 
   const payload = {
+    tracking_id: getTrackingId(),
     event_name: eventName,
     event_id: eventId,
     event_time: Math.floor(Date.now() / 1000),
@@ -127,6 +142,12 @@ function setupMetaTracking() {
   loadMetaPixel();
 
   document.querySelectorAll("[data-meta-checkout]").forEach((link) => {
+    try {
+      const checkoutUrl = new URL(link.href);
+      checkoutUrl.searchParams.set("sck", getTrackingId());
+      link.href = checkoutUrl.toString();
+    } catch (_) {}
+
     link.addEventListener("click", () => {
       trackMetaEvent("InitiateCheckout", {
         content_name: link.dataset.metaCheckout,
