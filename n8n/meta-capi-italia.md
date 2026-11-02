@@ -35,9 +35,9 @@ mesmo UUID acompanha os eventos enviados ao primeiro workflow. Quando a Hotmart
 notifica a compra, o segundo workflow lê `data.purchase.origin.sck`, recupera os
 identificadores do navegador e acrescenta os dados fornecidos pelo comprador.
 
-Email, telefone, nome, cidade, estado, país e `external_id` são normalizados e
-transformados em SHA-256 antes do envio. `fbc`, `fbp`, IP e user-agent são enviados
-sem hash, como exige a Meta.
+Email, telefone internacional, nome, cidade, estado, CEP, país, `buyer.ucode` e o
+identificador da sessão são normalizados e transformados em SHA-256 antes do
+envio. `fbc`, `fbp`, IP e user-agent são enviados sem hash, como exige a Meta.
 
 O `event_id` de `Purchase` é a transação Hotmart. Assim, uma repetição do webhook
 usa o mesmo ID e a Meta pode deduplicá-la. `InitiateCheckout` mantém outro

@@ -38,6 +38,7 @@ const META_CONFIG = Object.freeze({
 });
 
 let metaPixelReady = false;
+let generatedFbc = null;
 
 function createEventId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -66,8 +67,19 @@ function getCookie(name) {
 function getFbc() {
   const cookieValue = getCookie("_fbc");
   if (cookieValue) return cookieValue;
+
+  if (generatedFbc) return generatedFbc;
+
   const fbclid = new URLSearchParams(window.location.search).get("fbclid");
-  return fbclid ? `fb.1.${Date.now()}.${fbclid}` : null;
+  if (!fbclid) return null;
+
+  generatedFbc = `fb.1.${Date.now()}.${fbclid}`;
+
+  try {
+    document.cookie = `_fbc=${encodeURIComponent(generatedFbc)}; Max-Age=7776000; Path=/; SameSite=Lax; Secure`;
+  } catch (_) {}
+
+  return generatedFbc;
 }
 
 function sendCapiEvent(eventName, eventId, customData) {
