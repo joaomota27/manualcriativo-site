@@ -33,7 +33,10 @@ function setupYear() {
 
 const META_CONFIG = Object.freeze({
   pixelId: "2328916111389472",
-  capiEndpoint: "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel",
+  capiEndpoint: window.location.hostname === "borse101.pages.dev" || window.location.hostname.endsWith(".borse101.pages.dev")
+    ? "/api/pixel"
+    : "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel",
+  directCapiEndpoint: "https://jonyai-n8n-webhook.c9hj2a.easypanel.host/webhook/pixel",
   trackingStorageKey: "manualcriativo_meta_tracking_id"
 });
 
@@ -85,7 +88,13 @@ function getFbc() {
 }
 
 function sendCapiEvent(eventName, eventId, customData) {
-  if (!/^https:\/\//i.test(META_CONFIG.capiEndpoint)) return;
+  let endpoint;
+
+  try {
+    endpoint = new URL(META_CONFIG.capiEndpoint, window.location.origin);
+  } catch (_) {
+    return;
+  }
 
   const userData = {
     fbc: getFbc(),
@@ -110,13 +119,32 @@ function sendCapiEvent(eventName, eventId, customData) {
 
   const formBody = new URLSearchParams({ payload: JSON.stringify(payload) });
 
-  fetch(META_CONFIG.capiEndpoint, {
+  const isSameOrigin = endpoint.origin === window.location.origin;
+
+  const requestOptions = {
     method: "POST",
     body: formBody,
-    mode: "no-cors",
+    mode: isSameOrigin ? "same-origin" : "no-cors",
     keepalive: true,
-    credentials: "omit"
-  }).catch(() => {});
+    credentials: isSameOrigin ? "same-origin" : "omit"
+  };
+
+  const sendDirectFallback = () => {
+    if (!isSameOrigin) return;
+    fetch(META_CONFIG.directCapiEndpoint, {
+      method: "POST",
+      body: formBody,
+      mode: "no-cors",
+      keepalive: true,
+      credentials: "omit"
+    }).catch(() => {});
+  };
+
+  fetch(endpoint.href, requestOptions)
+    .then((response) => {
+      if (!response.ok) sendDirectFallback();
+    })
+    .catch(sendDirectFallback);
 }
 
 function trackMetaEvent(eventName, customData = {}) {
