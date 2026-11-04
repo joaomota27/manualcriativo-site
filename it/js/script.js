@@ -39,6 +39,7 @@ const META_CONFIG = Object.freeze({
 
 let metaPixelReady = false;
 let generatedFbc = null;
+let fallbackTrackingId = null;
 
 function createEventId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -54,7 +55,8 @@ function getTrackingId() {
     window.localStorage.setItem(META_CONFIG.trackingStorageKey, newId);
     return newId;
   } catch (_) {
-    return createEventId();
+    if (!fallbackTrackingId) fallbackTrackingId = createEventId();
+    return fallbackTrackingId;
   }
 }
 
@@ -122,7 +124,7 @@ function trackMetaEvent(eventName, customData = {}) {
 
   const eventId = createEventId();
   window.fbq("track", eventName, customData, { eventID: eventId });
-  window.setTimeout(() => sendCapiEvent(eventName, eventId, customData), 350);
+  sendCapiEvent(eventName, eventId, customData);
 }
 
 function loadMetaPixel() {
